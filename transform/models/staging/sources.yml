@@ -1,0 +1,15 @@
+version: 2
+
+sources:
+  - name: raw
+    database: GAMING_DB
+    schema: RAW
+    tables:
+      - name: GAMES_RAW
+        description: "Raw JSON game records loaded from RAWG.io via Azure Function"
+
+      - name: GENRES_RAW
+        description: "Raw JSON genre lookup from RAWG.io"
+
+      - name: PLATFORMS_RAW
+        description: "Raw JSON platform lookup from RAWG.io"

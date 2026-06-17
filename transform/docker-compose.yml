@@ -1,0 +1,9 @@
+version: '3.8'
+services:
+  dbt:
+    build: .
+    volumes:
+      - .:/usr/app/dbt          # mounts your local files into the container
+    environment:
+      - DBT_PROFILES_DIR=/usr/app/dbt   # look for profiles.yml right here
+ 

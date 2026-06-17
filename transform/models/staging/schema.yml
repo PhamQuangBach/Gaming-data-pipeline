@@ -1,0 +1,34 @@
+version: 2
+
+models:
+  - name: stg_games
+    description: "Cleaned, typed game records from RAWG.io"
+    columns:
+      - name: game_id
+        description: "RAWG unique game identifier"
+        tests:
+          - unique
+          - not_null
+      - name: name
+        tests:
+          - not_null
+      - name: rating
+        description: "User rating 0-5"
+      - name: metacritic_score
+        description: "Metacritic score 0-100"
+
+  - name: stg_genres
+    description: "Genre lookup table"
+    columns:
+      - name: genre_id
+        tests:
+          - unique
+          - not_null
+
+  - name: stg_platforms
+    description: "Platform lookup table"
+    columns:
+      - name: platform_id
+        tests:
+          - unique
+          - not_null

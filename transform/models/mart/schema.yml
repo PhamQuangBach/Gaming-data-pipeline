@@ -1,0 +1,27 @@
+version: 2
+
+models:
+  - name: mart_top_games
+    description: "Games ranked by combined user + critic score. Primary analytics table."
+    columns:
+      - name: game_id
+        tests:
+          - unique
+          - not_null
+      - name: combined_score
+        tests:
+          - not_null
+      - name: overall_rank
+        tests:
+          - unique
+          - not_null
+
+  - name: mart_genre_trends
+    description: "Average ratings per genre per year. Used for trend analysis."
+    columns:
+      - name: genre_name
+        tests:
+          - not_null
+      - name: release_year
+        tests:
+          - not_null
