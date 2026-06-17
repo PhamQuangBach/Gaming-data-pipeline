@@ -25,11 +25,10 @@ jobs:
         run: pip install dbt-snowflake==1.8.0
  
       - name: Write profiles.yml from secrets
-        # We generate profiles.yml at runtime from GitHub Secrets —
-        # it never exists as a committed file.
+        # Generate profiles.yml at runtime
+        working-directory: transform
         run: |
-          mkdir -p transform
-          cat > transform/profiles.yml << EOT
+          cat > profiles.yml << EOT
           gaming_pipeline:
             target: ci
             outputs:

@@ -3,7 +3,7 @@ import logging
 import os
 import json
 import tempfile
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from azure.storage.blob import BlobServiceClient
 from azure.identity import DefaultAzureCredential
 import snowflake.connector

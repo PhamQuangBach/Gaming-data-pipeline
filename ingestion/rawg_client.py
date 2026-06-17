@@ -37,7 +37,7 @@ def fetch_games(api_key: str, max_pages: int = 5) -> list[dict]:
 def fetch_games_released_on(api_key: str, target_date: date = None, max_pages: int = 20) -> list[dict]:
 
     if target_date is None:
-        target_date = date.today() - timedelta(days=2)
+        target_date = date.today() - timedelta(days=1)
  
     date_str = target_date.isoformat()
     games = []
