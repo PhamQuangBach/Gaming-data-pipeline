@@ -8,7 +8,7 @@ on:
   pull_request:
     branches: [main]
     paths: ['transform/**']
-
+ 
 jobs:
   dbt:
     runs-on: ubuntu-latest
@@ -16,18 +16,19 @@ jobs:
       DBT_PROFILES_DIR: ./transform
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
-
+        uses: actions/checkout@v6
+ 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.11'
-
+ 
       - name: Install dbt-snowflake
         run: pip install dbt-snowflake==1.8.0
-
+ 
       - name: Write profiles.yml from secrets
-        # Generate profiles.yml at runtime
+        # We generate profiles.yml at runtime from GitHub Secrets —
+        # it never exists as a committed file.
         run: |
           mkdir -p transform
           cat > transform/profiles.yml << EOT
@@ -45,23 +46,23 @@ jobs:
                 schema: STAGING
                 threads: 2
           EOT
-
+ 
       - name: dbt deps
         working-directory: transform
         run: dbt deps || true   # no-op if no packages.yml exists yet
-
+ 
       - name: dbt compile (catches SQL syntax errors)
         working-directory: transform
         run: dbt compile
-
+ 
       - name: dbt run
         working-directory: transform
         run: dbt run
-
+ 
       - name: dbt test
         working-directory: transform
         run: dbt test
-
+ 
       - name: dbt docs generate
         working-directory: transform
         run: dbt docs generate
