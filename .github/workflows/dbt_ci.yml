@@ -1,17 +1,14 @@
-name: dbt CI (compile, run, test)
-
-# Runs whenever dbt code change
 on:
   push:
     branches: [main]
+    paths: ['transform/**']
   pull_request:
     branches: [main]
+    paths: ['transform/**']
  
 jobs:
   dbt:
     runs-on: ubuntu-latest
-    env:
-      DBT_PROFILES_DIR: ./transform
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -25,7 +22,8 @@ jobs:
         run: pip install dbt-snowflake==1.8.0
  
       - name: Write profiles.yml from secrets
-        # Generate profiles.yml at runtime
+        # We generate profiles.yml at runtime from GitHub Secrets —
+        # it never exists as a committed file.
         working-directory: transform
         run: |
           cat > profiles.yml << EOT
@@ -37,13 +35,22 @@ jobs:
                 account: "${{ secrets.SNOWFLAKE_ACCOUNT }}"
                 user: "${{ secrets.SNOWFLAKE_USER }}"
                 password: "${{ secrets.SNOWFLAKE_PASSWORD }}"
-                role: ""
                 warehouse: GAMING_WH
                 database: GAMING_DB
                 schema: STAGING
                 threads: 2
           EOT
-
+ 
+      - name: Validate profiles.yml is parseable YAML
+        working-directory: transform
+        run: |
+          python -c "
+          import yaml
+          data = yaml.safe_load(open('profiles.yml'))
+          data['gaming_pipeline']['outputs']['ci']['password'] = '***MASKED***'
+          print(data)
+          "
+ 
       - name: Confirm profiles.yml landed where expected
         run: |
           echo "Workspace: ${{ github.workspace }}"
@@ -55,7 +62,7 @@ jobs:
  
       - name: dbt compile (catches SQL syntax errors)
         working-directory: transform
-        run: dbt compile
+        run: dbt compile --profiles-dir .
  
       - name: dbt run
         working-directory: transform
