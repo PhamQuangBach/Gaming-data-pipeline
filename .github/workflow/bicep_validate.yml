@@ -1,0 +1,37 @@
+name: Validate Bicep
+
+# Runs whenever Bicep files change
+on:
+  push:
+    branches: [main]
+    paths: ['infra/**']
+  pull_request:
+    branches: [main]
+    paths: ['infra/**']
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Bicep CLI
+        run: |
+          curl -Lo bicep https://github.com/Azure/bicep/releases/latest/download/bicep-linux-x64
+          chmod +x ./bicep
+          sudo mv ./bicep /usr/local/bin/bicep
+          bicep --version
+
+      - name: Build main.bicep
+        run: bicep build infra/main.bicep --outfile /tmp/main.json
+
+      - name: Build each module independently
+        run: |
+          for f in infra/modules/*.bicep; do
+            echo "Building $f"
+            bicep build "$f" --stdout > /dev/null
+          done
+
+      - name: Lint check
+        run: bicep build infra/main.bicep --stdout > /dev/null

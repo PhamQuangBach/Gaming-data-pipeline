@@ -7,12 +7,7 @@ import logging
 log = logging.getLogger(__name__)
 
 def write_jsonl(records: list[dict], entity: str, base_dir: str = "data/bronze") -> Path:
-    """
-    Write a list of dicts to a JSONL file partitioned by today's date.
-
-    Output path: data/bronze/{entity}/{YYYY-MM-DD}/data.jsonl
-    This mirrors the folder structure we'll use in Azure ADLS Gen2.
-    """
+    # Output path: data/bronze/{entity}/{YYYY-MM-DD}/data.jsonl
     today = date.today().isoformat()
     output_dir = Path(base_dir) / entity / today
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -28,14 +23,14 @@ def write_jsonl(records: list[dict], entity: str, base_dir: str = "data/bronze")
 
 
 def preview(path: Path, n: int = 2) -> None:
-    """Print the first n records from a JSONL file so you can eyeball the data."""
+    # Preview
     print(f"\n--- Preview of {path} (first {n} records) ---")
     with open(path, encoding="utf-8") as f:
         for i, line in enumerate(f):
             if i >= n:
                 break
             record = json.loads(line)
-            # Print a readable subset of fields
+            # Print fields
             print(json.dumps({
                 "id": record.get("id"),
                 "name": record.get("name"),

@@ -1,5 +1,3 @@
--- Parses genre lookup table from GENRES_RAW.
-
 WITH raw AS (
     SELECT raw_data
     FROM {{ source('raw', 'GENRES_RAW') }}

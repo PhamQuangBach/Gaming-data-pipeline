@@ -1,5 +1,3 @@
--- Parses platform lookup table from PLATFORMS_RAW.
-
 WITH raw AS (
     SELECT raw_data
     FROM {{ source('raw', 'PLATFORMS_RAW') }}

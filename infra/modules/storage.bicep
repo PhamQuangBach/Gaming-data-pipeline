@@ -8,7 +8,7 @@ resource storageAccount 'Microsoft.Storage/storageAccounts@2023-01-01' = {
   kind: 'StorageV2'
   sku: { name: 'Standard_LRS' }
   properties: {
-    isHnsEnabled: true           // ADLS Gen2 — hierarchical namespace
+    isHnsEnabled: true           
     allowBlobPublicAccess: false
     minimumTlsVersion: 'TLS1_2'
     supportsHttpsTrafficOnly: true

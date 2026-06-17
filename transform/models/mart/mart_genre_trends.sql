@@ -1,12 +1,8 @@
--- Average rating and metacritic score per genre per release year.
--- Uses Snowflake's FLATTEN to unnest the genres array on each game.
-
 WITH games AS (
     SELECT * FROM {{ ref('stg_games') }}
     WHERE released_date IS NOT NULL
 ),
 
--- FLATTEN explodes the genres_raw array so each game-genre pair is its own row
 game_genres AS (
     SELECT
         g.game_id,

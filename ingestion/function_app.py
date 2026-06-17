@@ -28,12 +28,12 @@ def ingest_rawg(timer: func.TimerRequest) -> None:
     api_key   = os.environ["RAWG_API_KEY"]
     today     = date.today().isoformat()
 
-    # --- Fetch from RAWG ---
+    # Fetch Games from source
     games     = fetch_games(api_key, max_pages=5)
     genres    = fetch_genres(api_key)
     platforms = fetch_platforms(api_key)
 
-    # --- Upload to ADLS (archive/backup) ---
+    # Upload to ADLS
     try:
         adls_account = os.environ.get("ADLS_ACCOUNT_NAME")
         if adls_account:
@@ -48,7 +48,7 @@ def ingest_rawg(timer: func.TimerRequest) -> None:
     except Exception as e:
         log.warning(f"ADLS upload failed (non-fatal): {e}")
 
-    # --- Upload to Snowflake internal stage + COPY INTO ---
+    # Upload to Snowflake
     sf = _get_snowflake_connection()
     try:
         _load_to_snowflake(sf, games,     stage_path="games",     table="GAMES_RAW")
@@ -65,7 +65,7 @@ def ingest_rawg(timer: func.TimerRequest) -> None:
 
 
 def _load_to_snowflake(conn, records: list[dict], stage_path: str, table: str) -> None:
-    """Write records to a temp JSONL file, PUT to stage, COPY INTO table."""
+    # Write a temp file
     today = date.today().isoformat()
     remote_path = f"{stage_path}/{today}/data.jsonl"
 
@@ -78,14 +78,14 @@ def _load_to_snowflake(conn, records: list[dict], stage_path: str, table: str) -
 
     cursor = conn.cursor()
     try:
-        # PUT uploads the local file to the internal stage
+        # Upload the temp file to Snowflake
         cursor.execute(
             f"PUT file://{tmp_path} @GAMING_DB.RAW.rawg_internal_stage/{remote_path} "
             f"AUTO_COMPRESS=TRUE OVERWRITE=TRUE"
         )
         log.info(f"PUT {len(records)} records → stage/{remote_path}")
 
-        # COPY INTO loads from stage into table, appending new rows
+        # Copy data from temp file to Database 
         cursor.execute(f"""
             COPY INTO GAMING_DB.RAW.{table} (raw_data)
             FROM (
@@ -103,7 +103,6 @@ def _load_to_snowflake(conn, records: list[dict], stage_path: str, table: str) -
 
 
 def _get_snowflake_connection():
-    """Connect to Snowflake using credentials from Key Vault (via app settings)."""
     return snowflake.connector.connect(
         account=os.environ["SNOWFLAKE_ACCOUNT"],
         user=os.environ["SNOWFLAKE_USER"],

@@ -14,8 +14,7 @@ resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' = {
   }
 }
 
-// Grant the Function App's managed identity permission to read secrets
-// Only created if a principalId is provided
+// Function App identity permission
 resource secretsUserRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (functionAppPrincipalId != '') {
   name: guid(keyVault.id, functionAppPrincipalId, 'secrets-user')
   scope: keyVault

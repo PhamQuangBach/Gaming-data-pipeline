@@ -1,6 +1,3 @@
--- Top games ranked by a combined score of user rating and metacritic.
--- Ready for dashboards and BI tools.
-
 WITH games AS (
     SELECT * FROM {{ ref('stg_games') }}
     WHERE rating IS NOT NULL

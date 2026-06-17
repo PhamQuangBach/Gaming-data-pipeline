@@ -1,6 +1,3 @@
--- Parses raw JSON from GAMES_RAW into typed, named columns.
--- One row per game. Null-safe casts throughout.
-
 WITH raw AS (
     SELECT raw_data
     FROM {{ source('raw', 'GAMES_RAW') }}

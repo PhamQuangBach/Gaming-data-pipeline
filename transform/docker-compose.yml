@@ -3,7 +3,7 @@ services:
   dbt:
     build: .
     volumes:
-      - .:/usr/app/dbt          # mounts your local files into the container
+      - .:/usr/app/dbt
     environment:
-      - DBT_PROFILES_DIR=/usr/app/dbt   # look for profiles.yml right here
+      - DBT_PROFILES_DIR=/usr/app/dbt
  

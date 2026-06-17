@@ -3,17 +3,14 @@ param functionAppName string
 param storageAccountName string
 param keyVaultName string  
 
-// Storage account already exists (created by storage module)
 resource storageAccount 'Microsoft.Storage/storageAccounts@2023-01-01' existing = {
   name: storageAccountName
 }
 
-// Reference the existing Key Vault so we can get the secret URI
 resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' existing = {
   name: keyVaultName
 }
 
-// App Service Plan — Consumption (Y1) = pay per execution, ~free at student scale
 resource appServicePlan 'Microsoft.Web/serverfarms@2023-01-01' = {
   name: 'plan-${functionAppName}'
   location: location
