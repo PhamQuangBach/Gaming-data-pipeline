@@ -4,10 +4,8 @@ name: Validate Bicep
 on:
   push:
     branches: [main]
-    paths: ['infra/**']
   pull_request:
     branches: [main]
-    paths: ['infra/**']
 
 jobs:
   validate:

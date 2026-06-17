@@ -4,10 +4,8 @@ name: dbt CI (compile, run, test)
 on:
   push:
     branches: [main]
-    paths: ['transform/**']
   pull_request:
     branches: [main]
-    paths: ['transform/**']
  
 jobs:
   dbt:

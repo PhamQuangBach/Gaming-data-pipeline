@@ -4,10 +4,8 @@ name: Function CI (lint + test)
 on:
   push:
     branches: [main]
-    paths: ['ingestion/**']
   pull_request:
     branches: [main]
-    paths: ['ingestion/**']
  
 jobs:
   lint-and-test:
