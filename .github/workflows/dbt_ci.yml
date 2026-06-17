@@ -39,15 +39,13 @@ jobs:
                 threads: 2
           EOT
  
-      - name: Validate profiles.yml is parseable YAML
+      - name: Show profiles.yml structure
         working-directory: transform
-        run: |
-          python -c "
-          import yaml
-          data = yaml.safe_load(open('profiles.yml'))
-          data['gaming_pipeline']['outputs']['ci']['password'] = '***MASKED***'
-          print(data)
-          "
+        run: sed 's/password:.*/password: "***REDACTED***"/' profiles.yml
+ 
+      - name: dbt debug (verbose connection check)
+        working-directory: transform
+        run: dbt debug --profiles-dir . --target ci
  
       - name: Confirm profiles.yml landed where expected
         run: |
