@@ -7,7 +7,7 @@ from datetime import date, datetime
 from azure.storage.blob import BlobServiceClient
 from azure.identity import DefaultAzureCredential
 import snowflake.connector
-from rawg_client import fetch_games, fetch_genres, fetch_platforms
+from rawg_client import fetch_games_released_on, fetch_games, fetch_genres, fetch_platforms
 
 app = func.FunctionApp()
 log = logging.getLogger(__name__)
@@ -28,8 +28,11 @@ def ingest_rawg(timer: func.TimerRequest) -> None:
     api_key   = os.environ["RAWG_API_KEY"]
     today     = date.today().isoformat()
 
+    release_date = date.today() - timedelta(days=1)   # "yesterday" — the day that just fully elapsed
+    release_str  = release_date.isoformat()
+
     # Fetch Games from source
-    games     = fetch_games(api_key, max_pages=5)
+    games     = fetch_games_released_on(api_key, target_date=release_date)
     genres    = fetch_genres(api_key)
     platforms = fetch_platforms(api_key)
 
@@ -59,8 +62,8 @@ def ingest_rawg(timer: func.TimerRequest) -> None:
         sf.close()
 
     log.info(
-        f"Done — {len(games)} games, {len(genres)} genres, "
-        f"{len(platforms)} platforms loaded into Snowflake."
+        f"Done — {len(games)} games released {release_str}, "
+        f"{len(genres)} genres, {len(platforms)} platforms loaded into Snowflake."
     )
 
 

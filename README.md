@@ -101,12 +101,3 @@ As a result:
 - **CI is fully automated** : every push validates infrastructure, code, and data transformations.
 - **CD is manual** : deploying Bicep and publishing the Function App is done locally:
 
-```bash
-az deployment group create \
-  --resource-group gaming-pipeline \
-  --template-file infra/main.bicep \
-  --parameters infra/main.dev.bicepparam
-
-cd ingestion
-func azure functionapp publish <function-app-name> --python
-```

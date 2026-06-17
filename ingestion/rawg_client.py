@@ -1,6 +1,7 @@
 import requests
 import time
 import logging
+from datetime import date, timedelta
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 log = logging.getLogger(__name__)
@@ -16,7 +17,7 @@ def fetch_games(api_key: str, max_pages: int = 5) -> list[dict]:
     page = 1
 
     while url and (max_pages is None or page <= max_pages):
-        log.info(f"Fetching page {page} from RAWG...")
+        log.info(f"Fetching page {page} from RAWG")
         response = requests.get(url, params=params if page == 1 else None, timeout=15)
         response.raise_for_status()
         data = response.json()
@@ -33,6 +34,40 @@ def fetch_games(api_key: str, max_pages: int = 5) -> list[dict]:
     log.info(f"Done. Fetched {len(games)} games total.")
     return games
 
+def fetch_games_released_on(api_key: str, target_date: date = None, max_pages: int = 20) -> list[dict]:
+
+    if target_date is None:
+        target_date = date.today() - timedelta(days=2)
+ 
+    date_str = target_date.isoformat()
+    games = []
+    url = f"{BASE_URL}/games"
+    params = {
+        "key": api_key,
+        "page_size": 100,
+        "dates": f"{date_str},{date_str}", 
+        "ordering": "-added",                 
+    }
+    page = 1
+ 
+    log.info(f"Fetching games released on {date_str}...")
+ 
+    while url and page <= max_pages:
+        response = requests.get(url, params=params if page == 1 else None, timeout=15)
+        response.raise_for_status()
+        data = response.json()
+ 
+        batch = data.get("results", [])
+        games.extend(batch)
+        log.info(f"  Page {page}: got {len(batch)} games (total so far: {len(games)})")
+ 
+        url = data.get("next")
+        params = None
+        page += 1
+        time.sleep(0.2)
+ 
+    log.info(f"Done. {len(games)} games released on {date_str}.")
+    return games
 
 def fetch_genres(api_key: str) -> list[dict]:
     log.info("Fetching genres")

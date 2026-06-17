@@ -1,6 +1,6 @@
 import os
 from dotenv import load_dotenv
-from rawg_client import fetch_games, fetch_genres, fetch_platforms
+from rawg_client import fetch_games_released_on, fetch_games, fetch_genres, fetch_platforms
 from writer import write_jsonl, preview
 
 def main():
@@ -8,10 +8,10 @@ def main():
     api_key = os.getenv("RAWG_API_KEY")
 
     if not api_key:
-        raise ValueError("RAWG_API_KEY not found. Did you create your .env file?")
+        raise ValueError("RAWG_API_KEY not found")
 
     # Fetch data
-    games = fetch_games(api_key, max_pages=2)
+    games = fetch_games_released_on(api_key, max_pages=2)
     genres = fetch_genres(api_key)
     platforms = fetch_platforms(api_key)
 

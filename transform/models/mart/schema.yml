@@ -25,3 +25,20 @@ models:
       - name: release_year
         tests:
           - not_null
+
+  - name: mart_daily_release_counts
+    description: "Daily count of games released, with 7-day rolling and cumulative totals. One row per release date."
+    columns:
+      - name: released_date
+        tests:
+          - unique
+          - not_null
+      - name: games_released
+        tests:
+          - not_null
+      - name: rolling_7day_release_count
+        tests:
+          - not_null
+      - name: cumulative_release_count
+        tests:
+          - not_null
