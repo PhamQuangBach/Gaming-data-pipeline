@@ -15,7 +15,7 @@ def main():
     genres = fetch_genres(api_key)
     platforms = fetch_platforms(api_key)
 
-    # Write jsonl
+    # Write jsonl 
     games_path    = write_jsonl(games,     entity="games")
     genres_path   = write_jsonl(genres,    entity="genres")
     platforms_path = write_jsonl(platforms, entity="platforms")
