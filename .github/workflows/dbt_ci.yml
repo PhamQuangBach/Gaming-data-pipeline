@@ -41,7 +41,8 @@ jobs:
  
       - name: Show profiles.yml structure
         working-directory: transform
-        run: sed 's/password:.*/password: "***REDACTED***"/' profiles.yml
+        run: |
+          sed 's/password:.*/password: "REDACTED"/' profiles.yml
  
       - name: dbt debug (verbose connection check)
         working-directory: transform
