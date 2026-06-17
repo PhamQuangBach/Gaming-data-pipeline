@@ -43,10 +43,15 @@ jobs:
                 schema: STAGING
                 threads: 2
           EOT
+
+      - name: Confirm profiles.yml landed where expected
+        run: |
+          echo "Workspace: ${{ github.workspace }}"
+          ls -la ${{ github.workspace }}/transform/profiles.yml
  
       - name: dbt deps
         working-directory: transform
-        run: dbt deps || true   # no-op if no packages.yml exists yet
+        run: dbt deps --profiles-dir . || true   # no-op if no packages.yml exists yet
  
       - name: dbt compile (catches SQL syntax errors)
         working-directory: transform
@@ -54,12 +59,12 @@ jobs:
  
       - name: dbt run
         working-directory: transform
-        run: dbt run
+        run: dbt run --profiles-dir .
  
       - name: dbt test
         working-directory: transform
-        run: dbt test
+        run: dbt test --profiles-dir .
  
       - name: dbt docs generate
         working-directory: transform
-        run: dbt docs generate
+        run: dbt docs generate --profiles-dir .
