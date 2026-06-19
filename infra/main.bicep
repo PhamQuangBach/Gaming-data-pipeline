@@ -2,8 +2,9 @@ targetScope = 'resourceGroup'
 
 param location string = resourceGroup().location
 param environment string = 'dev'
+param allowedOrigin string = '*'   // your GitHub Pages URL, e.g. https://yourusername.github.io
 
-// Resource names suffix with a hash
+// Resource names — all globally unique, so we suffix with a short hash
 var suffix = uniqueString(resourceGroup().id)
 var storageAccountName = 'rawgadls${take(suffix, 8)}'   // max 24 chars, lowercase only
 var keyVaultName = 'kv-gaming-${take(suffix, 8)}'
@@ -33,11 +34,12 @@ module function './modules/function.bicep' = {
     functionAppName: functionAppName
     storageAccountName: storageAccountName
     keyVaultName: keyvault.outputs.keyVaultName
+    allowedOrigin: allowedOrigin
   }
   dependsOn: [storage]
 }
 
-// Outputs
+// Outputs — printed after deploy so you can copy them
 output storageAccountName string = storage.outputs.storageAccountName
 output adlsEndpoint string = storage.outputs.primaryEndpoint
 output keyVaultName string = keyvault.outputs.keyVaultName
