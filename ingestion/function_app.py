@@ -7,36 +7,45 @@ from datetime import date, datetime, timedelta
 from azure.storage.blob import BlobServiceClient
 from azure.identity import DefaultAzureCredential
 import snowflake.connector
-from rawg_client import fetch_games_released_on, fetch_games, fetch_genres, fetch_platforms
+from rawg_client import fetch_games_released_on, fetch_genres, fetch_platforms
 
 app = func.FunctionApp()
 log = logging.getLogger(__name__)
 
 
-@app.timer_trigger(
-    schedule="0 0 2 * * *",
-    arg_name="timer",
-    run_on_startup=False,
-    use_monitor=True
-)
-def ingest_rawg(timer: func.TimerRequest) -> None:
-    if timer.past_due:
-        log.warning("Timer is past due — running now anyway.")
+@app.route(route="ingest_rawg", methods=["POST"], auth_level=func.AuthLevel.FUNCTION)
+def ingest_rawg(req: func.HttpRequest) -> func.HttpResponse:
+    try:
+        result = _run_ingestion()
+        return func.HttpResponse(
+            json.dumps(result),
+            status_code=200,
+            mimetype="application/json",
+        )
+    except Exception as e:
+        log.error(f"Ingestion failed: {e}")
+        return func.HttpResponse(
+            json.dumps({"status": "error", "message": str(e)}),
+            status_code=500,
+            mimetype="application/json",
+        )
 
+
+def _run_ingestion() -> dict:
+    """The actual ingestion logic, factored out so both the HTTP handler above
+    and any future caller (tests, a CLI) can invoke it directly."""
     log.info(f"RAWG ingestion started at {datetime.utcnow().isoformat()}")
 
-    api_key   = os.environ["RAWG_API_KEY"]
-    today     = date.today().isoformat()
-
-    release_date = date.today() - timedelta(days=1)   # "yesterday" — the day that just fully elapsed
+    api_key      = os.environ["RAWG_API_KEY"]
+    release_date = date.today() - timedelta(days=1)   
     release_str  = release_date.isoformat()
 
-    # Fetch Games from source
     games     = fetch_games_released_on(api_key, target_date=release_date)
     genres    = fetch_genres(api_key)
     platforms = fetch_platforms(api_key)
 
-    # Upload to ADLS
+    log.info(f"{len(games)} games released on {release_str}")
+
     try:
         adls_account = os.environ.get("ADLS_ACCOUNT_NAME")
         if adls_account:
@@ -44,19 +53,18 @@ def ingest_rawg(timer: func.TimerRequest) -> None:
                 account_url=f"https://{adls_account}.blob.core.windows.net",
                 credential=DefaultAzureCredential()
             )
-            _upload_jsonl_adls(blob_client, games,     "bronze", f"games/{today}/data.jsonl")
-            _upload_jsonl_adls(blob_client, genres,    "bronze", f"genres/{today}/data.jsonl")
-            _upload_jsonl_adls(blob_client, platforms, "bronze", f"platforms/{today}/data.jsonl")
+            _upload_jsonl_adls(blob_client, games,     "bronze", f"games/{release_str}/data.jsonl")
+            _upload_jsonl_adls(blob_client, genres,    "bronze", f"genres/{release_str}/data.jsonl")
+            _upload_jsonl_adls(blob_client, platforms, "bronze", f"platforms/{release_str}/data.jsonl")
             log.info("ADLS upload complete.")
     except Exception as e:
         log.warning(f"ADLS upload failed (non-fatal): {e}")
 
-    # Upload to Snowflake
     sf = _get_snowflake_connection()
     try:
-        _load_to_snowflake(sf, games,     stage_path="games",     table="GAMES_RAW")
-        _load_to_snowflake(sf, genres,    stage_path="genres",    table="GENRES_RAW")
-        _load_to_snowflake(sf, platforms, stage_path="platforms", table="PLATFORMS_RAW")
+        _load_to_snowflake(sf, games,     stage_path="games",     table="GAMES_RAW",     partition=release_str)
+        _load_to_snowflake(sf, genres,    stage_path="genres",    table="GENRES_RAW",    partition=release_str)
+        _load_to_snowflake(sf, platforms, stage_path="platforms", table="PLATFORMS_RAW", partition=release_str)
         log.info("Snowflake load complete.")
     finally:
         sf.close()
@@ -66,11 +74,21 @@ def ingest_rawg(timer: func.TimerRequest) -> None:
         f"{len(genres)} genres, {len(platforms)} platforms loaded into Snowflake."
     )
 
+    return {
+        "status": "success",
+        "release_date": release_str,
+        "games_loaded": len(games),
+        "genres_loaded": len(genres),
+        "platforms_loaded": len(platforms),
+    }
 
-def _load_to_snowflake(conn, records: list[dict], stage_path: str, table: str) -> None:
-    # Write a temp file
-    today = date.today().isoformat()
-    remote_path = f"{stage_path}/{today}/data.jsonl"
+
+def _load_to_snowflake(conn, records: list[dict], stage_path: str, table: str, partition: str) -> None:
+    if not records:
+        log.info(f"No records for {table} on {partition} — skipping load.")
+        return
+
+    remote_path = f"{stage_path}/{partition}/data.jsonl"
 
     with tempfile.NamedTemporaryFile(
         mode="w", suffix=".jsonl", delete=False, encoding="utf-8"
@@ -81,18 +99,16 @@ def _load_to_snowflake(conn, records: list[dict], stage_path: str, table: str) -
 
     cursor = conn.cursor()
     try:
-        # Upload the temp file to Snowflake
         cursor.execute(
             f"PUT file://{tmp_path} @GAMING_DB.RAW.rawg_internal_stage/{remote_path} "
             f"AUTO_COMPRESS=TRUE OVERWRITE=TRUE"
         )
         log.info(f"PUT {len(records)} records → stage/{remote_path}")
 
-        # Copy data from temp file to Database 
         cursor.execute(f"""
-            COPY INTO GAMING_DB.RAW.{table} (raw_data)
+            COPY INTO GAMING_DB.RAW.{table} (raw_data, loaded_at)
             FROM (
-                SELECT $1
+                SELECT $1, CURRENT_TIMESTAMP()
                 FROM @GAMING_DB.RAW.rawg_internal_stage/{remote_path}
             )
             FILE_FORMAT = (TYPE = JSON)
@@ -117,11 +133,12 @@ def _get_snowflake_connection():
 
 
 def _upload_jsonl_adls(blob_client, records, container, path):
+    if not records:
+        return
     content = "\n".join(json.dumps(r, ensure_ascii=False) for r in records)
     blob = blob_client.get_blob_client(container=container, blob=path)
     blob.upload_blob(content.encode("utf-8"), overwrite=True)
     log.info(f"ADLS: uploaded {len(records)} records → {container}/{path}")
-
 
 
 # Public HTTP API
@@ -136,7 +153,7 @@ ALLOWED_QUERIES = {
         SELECT released_date, games_released, rolling_7day_release_count, cumulative_release_count
         FROM GAMING_DB.MART.MART_DAILY_RELEASE_COUNTS
         ORDER BY released_date DESC
-        LIMIT 500
+        LIMIT 90
     """,
     "genre_trends": """
         SELECT genre_name, release_year, game_count, avg_user_rating, avg_metacritic
@@ -145,7 +162,8 @@ ALLOWED_QUERIES = {
         LIMIT 200
     """,
 }
- 
+
+
 @app.route(route="games", methods=["GET", "OPTIONS"], auth_level=func.AuthLevel.ANONYMOUS)
 def get_games_data(req: func.HttpRequest) -> func.HttpResponse:
     """
@@ -154,13 +172,13 @@ def get_games_data(req: func.HttpRequest) -> func.HttpResponse:
     GET /api/games?report=genre_trends
     """
     cors_headers = _cors_headers()
- 
-    # Browsers send an OPTIONS first before the real GET
+
+    # Browser send an OPTIONS before the real GET
     if req.method == "OPTIONS":
         return func.HttpResponse(status_code=204, headers=cors_headers)
- 
+
     report = req.params.get("report", "top_games")
- 
+
     if report not in ALLOWED_QUERIES:
         return func.HttpResponse(
             json.dumps({
@@ -171,25 +189,25 @@ def get_games_data(req: func.HttpRequest) -> func.HttpResponse:
             mimetype="application/json",
             headers=cors_headers,
         )
- 
+
     try:
         conn = _get_reader_connection()
         cursor = conn.cursor()
         cursor.execute(ALLOWED_QUERIES[report])
- 
+
         columns = [col[0].lower() for col in cursor.description]
         rows = [dict(zip(columns, row)) for row in cursor.fetchall()]
- 
+
         cursor.close()
         conn.close()
- 
+
         return func.HttpResponse(
             json.dumps({"report": report, "row_count": len(rows), "data": rows}, default=str),
             status_code=200,
             mimetype="application/json",
             headers=cors_headers,
         )
- 
+
     except Exception as e:
         log.error(f"Error serving /games?report={report}: {e}")
         return func.HttpResponse(
@@ -198,12 +216,9 @@ def get_games_data(req: func.HttpRequest) -> func.HttpResponse:
             mimetype="application/json",
             headers=cors_headers,
         )
- 
- 
+
+
 def _get_reader_connection():
-    """
-    Connect using the gaming_reader user
-    """
     return snowflake.connector.connect(
         account=os.environ["SNOWFLAKE_ACCOUNT"],
         user=os.environ["SNOWFLAKE_READER_USER"],
@@ -212,12 +227,9 @@ def _get_reader_connection():
         database="GAMING_DB",
         schema="MART",
     )
- 
- 
+
+
 def _cors_headers() -> dict:
-    """
-    Only the configured origin(s) may call this API from browser JS
-    """
     origin = os.environ.get("ALLOWED_ORIGIN", "*")
     return {
         "Access-Control-Allow-Origin": origin,
@@ -225,4 +237,3 @@ def _cors_headers() -> dict:
         "Access-Control-Allow-Headers": "Content-Type",
         "Access-Control-Max-Age": "3600",
     }
- 
