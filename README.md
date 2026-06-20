@@ -1,8 +1,18 @@
-# Gaming Data Pipeline — RAWG.io → Azure → Snowflake
+# Gaming Data Pipeline
 
-An end-to-end data engineering pipeline that ingests video game data from the [RAWG.io](https://rawg.io/apidocs) API, lands it in Azure, transforms it through a medallion architecture in Snowflake, and validates every change automatically via GitHub Actions.
+A cloud data pipeline that tracks daily video game releases. It pulls data from the [RAWG.io](https://rawg.io/apidocs) API, lands it in Azure, transforms it through a medallion architecture in Snowflake, and exposes the results through a public read-only API for consumption by a website.
 
-Built as a learning project to practice cloud data engineering: infrastructure-as-code, serverless ingestion, dbt transformations, and CI/CD.
+## What it does
+
+Every day, the pipeline:
+
+1. Fetches games released the previous day from RAWG.io, plus genre and platform lookup tables
+2. Archives the raw data in Azure Data Lake Storage and loads it into Snowflake
+3. Transforms it with dbt into clean, typed tables
+4. Produces analytics-ready tables
+5. Serves the results through a public API, ready for a frontend to consume
+
+The whole sequence runs automatically on a daily schedule with no manual intervention.
 
 ## Architecture
 
@@ -10,94 +20,103 @@ Built as a learning project to practice cloud data engineering: infrastructure-a
 RAWG.io API
      │
      ▼
-Azure Function (Python, timer trigger, daily 02:00 UTC)
+Azure Function (ingestion)
      │
-     ├────────────────────────────┐
-     ▼                            ▼
-Azure Data Lake Gen2    Snowflake internal stage
-(bronze archive)                  │
-                                  ▼
-                        Snowflake RAW schema  (COPY INTO)
-                                  │
-                                  ▼  dbt models
-                        Snowflake STAGING schema (views, typed columns)
-                                  │
-                                  ▼  dbt models
-                        Snowflake MART schema  (tables, analytics-ready)
+     ├────────────────────────┐
+     ▼                        ▼
+Azure Data Lake Gen2    Snowflake
+(raw archive,           RAW schema
+ 30-day retention)      (COPY INTO)
+                              │
+                              ▼  dbt
+                        STAGING schema
+                        (typed, deduplicated)
+                              │
+                              ▼  dbt
+                        MART schema
+                        (analytics-ready)
+                              │
+                              ▼
+                  Azure Function (public API)
+                              │
+                              ▼
+                       Website (browser)
 ```
 
-Secrets (RAWG API key, Snowflake credentials) are never stored in code — the Function App pulls them at runtime from Azure Key Vault via its system-assigned managed identity.
+A scheduled GitHub Actions workflow triggers ingestion and runs the dbt transformations in sequence each day, stopping early if any step fails.
 
 ## Tech stack
 
 | Layer | Technology |
 |---|---|
 | Data source | RAWG.io REST API |
-| Ingestion | Azure Functions (Python 3.11, timer trigger) |
-| Storage | Azure Data Lake Storage Gen2 (bronze archive) |
-| Secrets | Azure Key Vault (managed identity, no stored credentials) |
-| Warehouse | Snowflake (RAW / STAGING / MART schemas) |
-| Transformation | dbt Core, run via Docker |
-| Infrastructure as Code | Bicep |
-| CI | GitHub Actions |
+| Ingestion | Azure Functions (Python) |
+| Storage | Azure Data Lake Storage Gen2 |
+| Secrets | Azure Key Vault |
+| Warehouse | Snowflake |
+| Transformation | dbt Core |
+| Public API | Azure Functions (HTTP, CORS-scoped) |
+| Infrastructure as code | Bicep |
+| Orchestration & CI/CD | GitHub Actions, Apache Airflow |
 
 ## Repository structure
 
 ```
 gaming-pipeline/
-├── .github/workflows/       GitHub Actions CI pipelines
-│   ├── bicep_validate.yml   Lints/validates Bicep on every push
-│   ├── function_ci.yml      Lints + unit tests the Python ingestion code
-│   └── dbt_ci.yml           Runs dbt compile/run/test against live Snowflake
-├── infra/                   Bicep infrastructure-as-code
-│   ├── main.bicep
-│   ├── main.dev.bicepparam
-│   └── modules/
-│       ├── storage.bicep    ADLS Gen2 storage account + bronze container
-│       ├── keyvault.bicep   Key Vault + RBAC role assignment
-│       └── function.bicep   Function App with Key Vault-backed app settings
-├── ingestion/                Azure Function — RAWG ingestion
-│   ├── function_app.py      Timer-triggered entry point
-│   ├── rawg_client.py       Paginated RAWG API client
-│   ├── writer.py            Local JSONL writer (used for local dev/testing)
-│   ├── main.py              Local-only runner (no Azure required)
-│   └── tests/               Unit tests with mocked RAWG responses
-└── transform/                dbt project
-    ├── Dockerfile            Runs dbt inside a pinned Python 3.11 image
-    ├── docker-compose.yml
-    ├── dbt_project.yml
-    ├── profiles.yml.example  Template — copy to ~/.dbt/profiles.yml locally
-    └── models/
-        ├── staging/          Typed views: stg_games, stg_genres, stg_platforms
-        └── mart/              Analytics tables: mart_top_games, mart_genre_trends
+├── .github/workflows/      CI and the daily production schedule
+├── infra/                  Bicep infrastructure-as-code
+│   └── modules/            Storage, Key Vault, Function App
+├── ingestion/              Azure Function: ingestion + public API
+│   └── tests/              Unit tests with mocked API responses
+├── transform/              dbt project
+│   └── models/
+│       ├── staging/        Typed, deduplicated views
+│       └── mart/           Analytics-ready tables
+└── orchestration/          Airflow setup for local development
 ```
 
 ## Data model
 
-**RAW** (Snowflake, loaded via `COPY INTO`)
-Untouched JSON in a single `VARIANT` column per table: `GAMES_RAW`, `GENRES_RAW`, `PLATFORMS_RAW`.
+**RAW** : untouched JSON from the API, loaded as-is into Snowflake.
 
-**STAGING** (dbt views)
-Typed, cleaned columns parsed out of the raw JSON — `stg_games`, `stg_genres`, `stg_platforms`.
+**STAGING** : typed, cleaned views built with dbt. Deduplication happens here, keeping the most recently loaded version of each record.
 
-**MART** (dbt tables)
-- `mart_top_games` — games ranked by a blended score (60% Metacritic, 40% user rating)
-- `mart_genre_trends` — average rating and Metacritic score per genre, per release year (built using Snowflake's `LATERAL FLATTEN` to unnest each game's genre array)
+**MART** : analytics-ready tables:
+- `mart_genre_trends` : average rating and Metacritic score by genre and release year
+- `mart_daily_release_counts` : daily release volume, with a 7-day rolling count and a cumulative total
 
+## Public API
+
+A read-only HTTP endpoint serves pre-approved reports from the MART schema:
+
+```
+GET /api/games?report=daily_release_counts
+GET /api/games?report=genre_trends
+```
 
 ## CI/CD
 
-Every push triggers GitHub Actions, scoped to whichever part of the repo changed:
+Every push runs the relevant checks automatically:
 
-- **`bicep_validate.yml`** : compiles every Bicep file to catch syntax/type errors. Runs in plain GitHub-hosted runners; no cloud credentials needed.
-- **`function_ci.yml`** : lints the Python ingestion code and runs unit tests against mocked RAWG responses. No real network calls.
-- **`dbt_ci.yml`** : builds a `profiles.yml` from GitHub Secrets at runtime and runs `dbt compile → run → test → docs generate` against the real Snowflake warehouse. This is genuine end-to-end validation on every push.
+- Bicep files are validated for syntax and type errors
+- Python ingestion code is linted and unit tested against mocked API responses
+- dbt models are compiled, run, and tested against the live Snowflake warehouse
 
-### A deliberate limitation: deployment is manual
+A separate scheduled workflow runs the production pipeline daily: triggering ingestion, then running dbt, then running dbt tests, stopping the sequence if any step fails.
 
-This repo's Azure tenant (a university student subscription) restricts application/service-principal registration in Entra ID, which is what GitHub Actions needs to authenticate to Azure non-interactively (whether via OIDC or a client secret). Without admin approval, GitHub Actions cannot deploy to Azure on this account.
+Deploying changes to the Azure infrastructure or Function code is done manually rather than through CI/CD, due to a permissions restriction on the Azure subscription this project runs on. Running the pipeline day-to-day is fully automated; deploying *changes* to it is not.
 
-As a result:
-- **CI is fully automated** : every push validates infrastructure, code, and data transformations.
-- **CD is manual** : deploying Bicep and publishing the Function App is done locally:
+## Security
 
+- No secrets are committed to the repository
+- The Function App uses a system-assigned managed identity to read secrets from Key Vault
+- Separate, least-privilege Snowflake accounts are used for writing data and for serving the public API, so the public-facing endpoint has no write access to anything
+- Raw data in Azure Storage is automatically deleted after 30 days via a lifecycle policy
+
+## Possible next steps
+
+- Federated authentication so CI/CD can deploy infrastructure changes directly
+- Alerting on pipeline failures
+- A chart or dashboard on the website consuming the public API
+- Incremental dbt models as data volume grows
+- Broader data quality testing, including freshness checks
