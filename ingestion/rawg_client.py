@@ -108,8 +108,39 @@ def fetch_games_released_in_window(
         page += 1
         time.sleep(0.2)
  
-    log.info(f"Done. {len(games)} games released in window {start_str}..{end_str}.")
-    return games
+    validated = _filter_by_validated_release_date(games, start_date, end_date)
+
+    log.info(f"Done. {len(validated)} games released in window {start_str}..{end_str}.")
+    return validated
+
+def _filter_by_validated_release_date(games: list[dict], start_date: date, end_date: date) -> list[dict]:
+    validated = []
+    for game in games:
+        released_str = game.get("released")
+        if not released_str:
+            log.warning(f"Game id={game.get('id')} name={game.get('name')!r} has no `released` value — dropping.")
+            continue
+ 
+        try:
+            released_date = date.fromisoformat(released_str)
+        except ValueError:
+            log.warning(
+                f"Game id={game.get('id')} name={game.get('name')!r} has unparseable "
+                f"`released` value {released_str!r} — dropping."
+            )
+            continue
+ 
+        if not (start_date <= released_date <= end_date):
+            log.warning(
+                f"Game id={game.get('id')} name={game.get('name')!r} has `released`={released_date}, "
+                f"outside the requested window {start_date}..{end_date} despite matching the dates "
+                f"filter — dropping."
+            )
+            continue
+ 
+        validated.append(game)
+ 
+    return validated
 
 def fetch_genres(api_key: str) -> list[dict]:
     log.info("Fetching genres")
