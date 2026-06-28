@@ -27,6 +27,7 @@ SELECT
     raw_data:suggestions_count::INTEGER           AS suggestions_count,
     raw_data:esrb_rating:name::STRING             AS esrb_rating,
     raw_data:background_image::STRING             AS background_image_url,
+    raw_data:description_raw::STRING              AS description_raw,
     raw_data:genres                               AS genres_raw,
     raw_data:platforms                            AS platforms_raw,
     CURRENT_TIMESTAMP()                           AS dbt_loaded_at

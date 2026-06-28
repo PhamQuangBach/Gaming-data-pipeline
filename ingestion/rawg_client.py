@@ -123,3 +123,42 @@ def fetch_platforms(api_key: str) -> list[dict]:
     response = requests.get(f"{BASE_URL}/platforms", params={"key": api_key}, timeout=15)
     response.raise_for_status()
     return response.json().get("results", [])
+
+def fetch_game_detail(api_key: str, game_id: int) -> dict | None:
+    url = f"{BASE_URL}/games/{game_id}"
+    response = requests.get(url, params={"key": api_key}, timeout=15)
+ 
+    if response.status_code == 404:
+        log.warning(f"Game id={game_id} returned 404 on detail endpoint — skipping.")
+        return None
+ 
+    response.raise_for_status()
+    return response.json()
+
+def enrich_with_descriptions(api_key: str, games: list[dict], pause_seconds: float = 0.3) -> list[dict]:
+    enriched = []
+    total = len(games)
+ 
+    for i, game in enumerate(games, start=1):
+        game_id = game.get("id")
+        if game_id is None:
+            log.warning(f"Game entry missing `id` — skipping enrichment for {game.get('name')!r}.")
+            enriched.append(game)
+            continue
+ 
+        log.info(f"Enriching {i}/{total}: id={game_id} name={game.get('name')!r}")
+        detail = fetch_game_detail(api_key, game_id)
+ 
+        if detail is None:
+            # Detail fetch failed/404 keep the original list-endpoint
+            enriched.append(game)
+        else:
+            # Merge: keep all original list-endpoint fields, add detail fields
+            merged = {**game, **detail}
+            enriched.append(merged)
+ 
+        time.sleep(pause_seconds)
+ 
+    described_count = sum(1 for g in enriched if g.get("description_raw"))
+    log.info(f"Enrichment complete: {described_count}/{total} games have a description.")
+    return enriched

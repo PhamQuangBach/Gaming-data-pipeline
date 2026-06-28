@@ -7,7 +7,7 @@ from datetime import date, datetime, timedelta
 from azure.storage.blob import BlobServiceClient
 from azure.identity import DefaultAzureCredential
 import snowflake.connector
-from rawg_client import fetch_games_released_on, fetch_genres, fetch_platforms, fetch_games_released_in_window
+from rawg_client import fetch_games_released_on, fetch_genres, fetch_platforms, fetch_games_released_in_window, enrich_with_descriptions
 
 app = func.FunctionApp()
 log = logging.getLogger(__name__)
@@ -45,6 +45,8 @@ def _run_ingestion() -> dict:
     platforms = fetch_platforms(api_key)
 
     log.info(f"{len(games)} games released on {release_str}")
+    if games:
+        games = enrich_with_descriptions(api_key, games)
 
     try:
         adls_account = os.environ.get("ADLS_ACCOUNT_NAME")

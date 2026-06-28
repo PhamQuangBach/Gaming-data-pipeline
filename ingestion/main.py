@@ -1,6 +1,6 @@
 import os
 from dotenv import load_dotenv
-from rawg_client import fetch_games_released_on, fetch_games, fetch_genres, fetch_platforms, fetch_games_released_in_window
+from rawg_client import fetch_games_released_on, fetch_games, fetch_genres, fetch_platforms, fetch_games_released_in_window, enrich_with_descriptions
 from writer import write_jsonl, preview
 
 def main():
@@ -14,6 +14,9 @@ def main():
     games = fetch_games_released_in_window(api_key, window_days=7)
     genres = fetch_genres(api_key)
     platforms = fetch_platforms(api_key)
+
+    if games:
+        games = enrich_with_descriptions(api_key, games)
 
     # Write jsonl 
     games_path    = write_jsonl(games,     entity="games")
