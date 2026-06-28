@@ -69,6 +69,48 @@ def fetch_games_released_on(api_key: str, target_date: date = None, max_pages: i
     log.info(f"Done. {len(games)} games released on {date_str}.")
     return games
 
+def fetch_games_released_in_window(
+    api_key: str,
+    end_date: date = None,
+    window_days: int = 7,
+    max_pages: int = 20,
+) -> list[dict]:
+    if end_date is None:
+        end_date = date.today() - timedelta(days=1)
+    start_date = end_date - timedelta(days=window_days - 1)
+ 
+    start_str = start_date.isoformat()
+    end_str = end_date.isoformat()
+ 
+    games = []
+    url = f"{BASE_URL}/games"
+    params = {
+        "key": api_key,
+        "page_size": 100,
+        "dates": f"{start_str},{end_str}",
+        "ordering": "-added",
+    }
+    page = 1
+ 
+    log.info(f"Fetching games released {start_str} through {end_str} ({window_days}-day window)...")
+ 
+    while url and page <= max_pages:
+        response = requests.get(url, params=params if page == 1 else None, timeout=15)
+        response.raise_for_status()
+        data = response.json()
+ 
+        batch = data.get("results", [])
+        games.extend(batch)
+        log.info(f"  Page {page}: got {len(batch)} games (total so far: {len(games)})")
+ 
+        url = data.get("next")
+        params = None
+        page += 1
+        time.sleep(0.2)
+ 
+    log.info(f"Done. {len(games)} games released in window {start_str}..{end_str}.")
+    return games
+
 def fetch_genres(api_key: str) -> list[dict]:
     log.info("Fetching genres")
     response = requests.get(f"{BASE_URL}/genres", params={"key": api_key}, timeout=15)

@@ -1,10 +1,8 @@
-name: Daily pipeline (production)
-
-# Runs every day
+name: Weekly pipeline
 
 on:
   schedule:
-    - cron: '0 3 * * *'
+    - cron: '0 3 * * 1'
   workflow_dispatch:
 
 jobs:
@@ -31,7 +29,7 @@ jobs:
           fi
 
   dbt_run:
-    needs: ingest   # only runs if the job above succeeded
+    needs: ingest   # only runs if the ingest job above succeeded
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code

@@ -1,6 +1,6 @@
 import os
 from dotenv import load_dotenv
-from rawg_client import fetch_games_released_on, fetch_games, fetch_genres, fetch_platforms
+from rawg_client import fetch_games_released_on, fetch_games, fetch_genres, fetch_platforms, fetch_games_released_in_window
 from writer import write_jsonl, preview
 
 def main():
@@ -11,7 +11,7 @@ def main():
         raise ValueError("RAWG_API_KEY not found")
 
     # Fetch data
-    games = fetch_games_released_on(api_key, max_pages=2)
+    games = fetch_games_released_in_window(api_key, window_days=7)
     genres = fetch_genres(api_key)
     platforms = fetch_platforms(api_key)
 

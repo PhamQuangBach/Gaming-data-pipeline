@@ -7,7 +7,7 @@ from datetime import date, datetime, timedelta
 from azure.storage.blob import BlobServiceClient
 from azure.identity import DefaultAzureCredential
 import snowflake.connector
-from rawg_client import fetch_games_released_on, fetch_genres, fetch_platforms
+from rawg_client import fetch_games_released_on, fetch_genres, fetch_platforms, fetch_games_released_in_window
 
 app = func.FunctionApp()
 log = logging.getLogger(__name__)
@@ -40,7 +40,7 @@ def _run_ingestion() -> dict:
     release_date = date.today() - timedelta(days=1)   
     release_str  = release_date.isoformat()
 
-    games     = fetch_games_released_on(api_key, target_date=release_date)
+    games     = fetch_games_released_in_window(api_key, end_date=release_date, window_days=7)
     genres    = fetch_genres(api_key)
     platforms = fetch_platforms(api_key)
 
