@@ -25,10 +25,12 @@ scored AS (
 
 SELECT
     *,
-    RANK() OVER (ORDER BY combined_score DESC)        AS overall_rank,
-    RANK() OVER (
+    ROW_NUMBER() OVER (
+        ORDER BY combined_score DESC, game_id ASC
+    )                                                            AS overall_rank,
+    ROW_NUMBER() OVER (
         PARTITION BY release_year
-        ORDER BY combined_score DESC
-    )                                                 AS rank_in_year
+        ORDER BY combined_score DESC, game_id ASC
+    )                                                            AS rank_in_year
 FROM scored
 ORDER BY overall_rank
