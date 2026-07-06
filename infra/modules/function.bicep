@@ -2,7 +2,7 @@ param location string
 param functionAppName string
 param storageAccountName string
 param keyVaultName string
-param allowedOrigin string = 'https://phamquangbach.github.io/'
+param allowedOrigin string = '*'
 
 resource storageAccount 'Microsoft.Storage/storageAccounts@2023-01-01' existing = {
   name: storageAccountName
@@ -17,7 +17,7 @@ resource appServicePlan 'Microsoft.Web/serverfarms@2023-01-01' = {
   location: location
   sku: { name: 'Y1', tier: 'Dynamic' }
   kind: 'functionapp'
-  properties: { reserved: true }  // required for Linux
+  properties: { reserved: true }
 }
 
 resource functionApp 'Microsoft.Web/sites@2023-01-01' = {
@@ -31,19 +31,21 @@ resource functionApp 'Microsoft.Web/sites@2023-01-01' = {
       pythonVersion: '3.11'
       linuxFxVersion: 'Python|3.11'
       appSettings: [
-        { name: 'AzureWebJobsStorage',   value: 'DefaultEndpointsProtocol=https;AccountName=${storageAccountName};AccountKey=${storageAccount.listKeys().keys[0].value}' }
-        { name: 'FUNCTIONS_EXTENSION_VERSION', value: '~4' }
-        { name: 'FUNCTIONS_WORKER_RUNTIME',    value: 'python' }
-        // RAWG and ADLS
-        { name: 'RAWG_API_KEY',          value: '@Microsoft.KeyVault(SecretUri=${keyVault.properties.vaultUri}secrets/rawg-api-key/)' }
-        { name: 'ADLS_ACCOUNT_NAME',     value: storageAccountName }
-        // Snowflake credentials — all resolved from Key Vault at runtime
-        { name: 'SNOWFLAKE_ACCOUNT',     value: '@Microsoft.KeyVault(SecretUri=${keyVault.properties.vaultUri}secrets/snowflake-account/)' }
-        { name: 'SNOWFLAKE_USER',        value: '@Microsoft.KeyVault(SecretUri=${keyVault.properties.vaultUri}secrets/snowflake-user/)' }
-        { name: 'SNOWFLAKE_PASSWORD',    value: '@Microsoft.KeyVault(SecretUri=${keyVault.properties.vaultUri}secrets/snowflake-password/)' }
-        { name: 'SNOWFLAKE_READER_USER',     value: '@Microsoft.KeyVault(SecretUri=${keyVault.properties.vaultUri}secrets/snowflake-reader-user/)' }
-        { name: 'SNOWFLAKE_READER_PASSWORD', value: '@Microsoft.KeyVault(SecretUri=${keyVault.properties.vaultUri}secrets/snowflake-reader-password/)' }
-        { name: 'ALLOWED_ORIGIN',            value: allowedOrigin }
+        { name: 'AzureWebJobsStorage',         value: 'DefaultEndpointsProtocol=https;AccountName=${storageAccountName};AccountKey=${storageAccount.listKeys().keys[0].value}' }
+        { name: 'FUNCTIONS_EXTENSION_VERSION',  value: '~4' }
+        { name: 'FUNCTIONS_WORKER_RUNTIME',     value: 'python' }
+        { name: 'RAWG_API_KEY',                 value: '@Microsoft.KeyVault(SecretUri=${keyVault.properties.vaultUri}secrets/rawg-api-key/)' }
+        { name: 'ADLS_ACCOUNT_NAME',            value: storageAccountName }
+        { name: 'SNOWFLAKE_ACCOUNT',            value: '@Microsoft.KeyVault(SecretUri=${keyVault.properties.vaultUri}secrets/snowflake-account/)' }
+        { name: 'SNOWFLAKE_USER',               value: '@Microsoft.KeyVault(SecretUri=${keyVault.properties.vaultUri}secrets/snowflake-user/)' }
+        { name: 'SNOWFLAKE_PASSWORD',           value: '@Microsoft.KeyVault(SecretUri=${keyVault.properties.vaultUri}secrets/snowflake-password/)' }
+        { name: 'SNOWFLAKE_READER_USER',        value: '@Microsoft.KeyVault(SecretUri=${keyVault.properties.vaultUri}secrets/snowflake-reader-user/)' }
+        { name: 'SNOWFLAKE_READER_PASSWORD',    value: '@Microsoft.KeyVault(SecretUri=${keyVault.properties.vaultUri}secrets/snowflake-reader-password/)' }
+        { name: 'ALLOWED_ORIGIN',               value: allowedOrigin }
+        // Postgres connection — used by embedding generation (Phase 4)
+        // and the search endpoint (Phase 5). Password pulled from Key Vault.
+        { name: 'PG_PASSWORD',                  value: '@Microsoft.KeyVault(SecretUri=${keyVault.properties.vaultUri}secrets/pgvector-postgres-password/)' }
+        { name: 'VOYAGE_API_KEY',               value: '@Microsoft.KeyVault(SecretUri=${keyVault.properties.vaultUri}secrets/voyage-api-key/)' }
       ]
     }
     httpsOnly: true

@@ -23,6 +23,9 @@ logs/
 data/
 *.jsonl
 
+# Backfill
+backfill/
+
 # OS / editor
 .DS_Store
 .vscode/
@@ -31,3 +34,4 @@ data/
 # Azure Functions local
 local.settings.json
 .python_packages/
+

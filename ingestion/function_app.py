@@ -8,6 +8,9 @@ from azure.storage.blob import BlobServiceClient
 from azure.identity import DefaultAzureCredential
 import snowflake.connector
 from rawg_client import fetch_games_released_on, fetch_genres, fetch_platforms, fetch_games_released_in_window, enrich_with_descriptions
+import psycopg2
+import voyageai
+
 
 app = func.FunctionApp()
 log = logging.getLogger(__name__)
@@ -239,3 +242,122 @@ def _cors_headers() -> dict:
         "Access-Control-Allow-Headers": "Content-Type",
         "Access-Control-Max-Age": "3600",
     }
+
+
+
+def _get_postgres_connection():
+    """
+    Connect to the pgvector Postgres instance.
+    Credentials come from Key Vault via app settings, same pattern as
+    Snowflake and RAWG. PG_HOST is the Flexible Server's FQDN from the
+    Bicep deploy output.
+    """
+    return psycopg2.connect(
+        host=os.environ["PG_HOST"],
+        port=5432,
+        dbname="gamesdb",
+        user="gaming_app",
+        password=os.environ["PG_PASSWORD"],
+        sslmode="require",
+        connect_timeout=10,
+    )
+ 
+ 
+def _get_voyage_client():
+    return voyageai.Client(api_key=os.environ["VOYAGE_API_KEY"])
+
+
+@app.route(route="search", methods=["GET", "OPTIONS"], auth_level=func.AuthLevel.ANONYMOUS)
+def search_games(req: func.HttpRequest) -> func.HttpResponse:
+    """
+    Semantic search endpoint — the showcase piece for the portfolio demo.
+ 
+    GET /api/search?q=open+world+fantasy+RPG
+    GET /api/search?q=cozy+farming+sim&limit=5
+ 
+    Flow:
+      1. Embed the query text with Voyage AI (same model as the stored vectors)
+      2. Run a pgvector cosine similarity search against the games table
+      3. Return the top-N most semantically similar games as JSON
+ 
+    This endpoint is what makes the portfolio demo interesting — a query like
+    "sad story with beautiful music" returns games by meaning, not keyword
+    matching, which only works because of the embedding pipeline we built.
+ 
+    CORS-enabled for the same origin as get_games_data.
+    No auth required — this is a public read-only endpoint.
+    """
+    cors_headers = _cors_headers()
+ 
+    if req.method == "OPTIONS":
+        return func.HttpResponse(status_code=204, headers=cors_headers)
+ 
+    query = req.params.get("q", "").strip()
+    if not query:
+        return func.HttpResponse(
+            json.dumps({"error": "Missing required parameter: q"}),
+            status_code=400,
+            mimetype="application/json",
+            headers=cors_headers,
+        )
+ 
+    try:
+        limit = min(int(req.params.get("limit", "10")), 20)  # cap at 20 results
+    except ValueError:
+        limit = 10
+ 
+    try:
+        # 1. Embed the query with Voyage AI
+        # input_type="query" tells Voyage this is a search query, not a document —
+        # it applies a different internal weighting that improves retrieval quality
+        # compared to using "document" for both sides.
+        voyage = _get_voyage_client()
+        result = voyage.embed([query], model="voyage-4-lite", input_type="query")
+        query_vector = result.embeddings[0]
+ 
+        # 2. Similarity search via pgvector
+        # <=> is the cosine distance operator — lower = more similar.
+        # We ORDER BY distance ASC so the most similar games come first.
+        # Only games with non-null embeddings are considered.
+        pg = _get_postgres_connection()
+        with pg.cursor() as cur:
+            cur.execute(
+                """
+                SELECT
+                    game_id,
+                    name,
+                    released_date,
+                    rating,
+                    metacritic_score,
+                    LEFT(description_raw, 300) AS description_preview,
+                    1 - (embedding <=> %s::vector) AS similarity
+                FROM games
+                WHERE embedding IS NOT NULL
+                ORDER BY embedding <=> %s::vector
+                LIMIT %s
+                """,
+                (query_vector, query_vector, limit)
+            )
+            columns = [col[0] for col in cur.description]
+            rows = [dict(zip(columns, row)) for row in cur.fetchall()]
+        pg.close()
+ 
+        return func.HttpResponse(
+            json.dumps({
+                "query": query,
+                "result_count": len(rows),
+                "results": rows,
+            }, default=str),
+            status_code=200,
+            mimetype="application/json",
+            headers=cors_headers,
+        )
+ 
+    except Exception as e:
+        log.error(f"Search failed for query={query!r}: {e}")
+        return func.HttpResponse(
+            json.dumps({"error": "Search failed. Please try again."}),
+            status_code=500,
+            mimetype="application/json",
+            headers=cors_headers,
+        )
