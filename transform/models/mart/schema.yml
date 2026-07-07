@@ -42,3 +42,10 @@ models:
       - name: cumulative_release_count
         tests:
           - not_null
+
+  - name: mart_catalog_stats
+    description: "Single-row catalog summary for the public API. Null-safe counts so games missing rating or metacritic are included in total_games but excluded from averages."
+    columns:
+      - name: total_games
+        tests:
+          - not_null

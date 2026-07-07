@@ -148,12 +148,6 @@ def _upload_jsonl_adls(blob_client, records, container, path):
 
 # Public HTTP API
 ALLOWED_QUERIES = {
-    "top_games": """
-        SELECT name, rating, metacritic_score, combined_score, overall_rank
-        FROM GAMING_DB.MART.MART_TOP_GAMES
-        ORDER BY overall_rank
-        LIMIT 50
-    """,
     "daily_release_counts": """
         SELECT released_date, games_released, rolling_7day_release_count, cumulative_release_count
         FROM GAMING_DB.MART.MART_DAILY_RELEASE_COUNTS
@@ -165,6 +159,18 @@ ALLOWED_QUERIES = {
         FROM GAMING_DB.MART.MART_GENRE_TRENDS
         ORDER BY release_year DESC, avg_user_rating DESC
         LIMIT 200
+    """,
+    "game_count": """
+        SELECT total_games, games_with_description,
+            games_with_rating, avg_rating,
+            games_with_metacritic, avg_metacritic
+        FROM GAMING_DB.MART.MART_CATALOG_STATS
+    """,
+    "top_games": """
+        SELECT name, rating, metacritic_score, combined_score, overall_rank
+        FROM GAMING_DB.MART.MART_TOP_GAMES
+        ORDER BY overall_rank
+        LIMIT 20
     """,
 }
 
