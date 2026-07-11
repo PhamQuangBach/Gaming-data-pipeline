@@ -128,3 +128,29 @@ jobs:
           PG_PASSWORD:         ${{ secrets.PG_PASSWORD }}
           VOYAGE_API_KEY:      ${{ secrets.VOYAGE_API_KEY }}
         run: python embed_sync.py
+
+  mart_sync:
+    needs: dbt_test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        working-directory: ingestion
+        run: pip install -r requirements.txt
+
+      - name: Run MART sync
+        working-directory: ingestion
+        env:
+          SNOWFLAKE_ACCOUNT:   ${{ secrets.SNOWFLAKE_ACCOUNT }}
+          SNOWFLAKE_USER:      ${{ secrets.SNOWFLAKE_USER }}
+          SNOWFLAKE_PASSWORD:  ${{ secrets.SNOWFLAKE_PASSWORD }}
+          PG_HOST:             ${{ secrets.PG_HOST }}
+          PG_PASSWORD:         ${{ secrets.PG_PASSWORD }}
+        run: python mart_sync.py

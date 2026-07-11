@@ -147,7 +147,34 @@ def _upload_jsonl_adls(blob_client, records, container, path):
 
 
 # Public HTTP API
-ALLOWED_QUERIES = {
+ALLOWED_QUERIES_PG = {
+    "daily_release_counts": """
+        SELECT released_date, games_released, rolling_7day_release_count, cumulative_release_count
+        FROM mart_daily_release_counts
+        ORDER BY released_date DESC
+        LIMIT 90
+    """,
+    "genre_trends": """
+        SELECT genre_name, release_year, game_count, avg_user_rating, avg_metacritic
+        FROM mart_genre_trends
+        ORDER BY release_year DESC, avg_user_rating DESC
+        LIMIT 200
+    """,
+    "game_count": """
+        SELECT total_games, games_with_description,
+            games_with_rating, avg_rating,
+            games_with_metacritic, avg_metacritic
+        FROM mart_catalog_stats
+    """,
+    "top_games": """
+        SELECT name, rating, metacritic_score, combined_score, overall_rank
+        FROM mart_top_games
+        ORDER BY overall_rank
+        LIMIT 20
+    """,
+}
+
+ALLOWED_QUERIES_SF = {
     "daily_release_counts": """
         SELECT released_date, games_released, rolling_7day_release_count, cumulative_release_count
         FROM GAMING_DB.MART.MART_DAILY_RELEASE_COUNTS
@@ -177,11 +204,6 @@ ALLOWED_QUERIES = {
 
 @app.route(route="games", methods=["GET", "OPTIONS"], auth_level=func.AuthLevel.ANONYMOUS)
 def get_games_data(req: func.HttpRequest) -> func.HttpResponse:
-    """
-    GET /api/games?report=top_games
-    GET /api/games?report=daily_release_counts
-    GET /api/games?report=genre_trends
-    """
     cors_headers = _cors_headers()
 
     # Browser send an OPTIONS before the real GET
@@ -189,12 +211,14 @@ def get_games_data(req: func.HttpRequest) -> func.HttpResponse:
         return func.HttpResponse(status_code=204, headers=cors_headers)
 
     report = req.params.get("report", "top_games")
+    source = req.params.get("source", "postgres")
+    query_set = ALLOWED_QUERIES_SF if source == "snowflake" else ALLOWED_QUERIES_PG
 
-    if report not in ALLOWED_QUERIES:
+    if report not in query_set:
         return func.HttpResponse(
             json.dumps({
                 "error": f"Unknown report '{report}'",
-                "available_reports": list(ALLOWED_QUERIES.keys())
+                "available_reports": list(query_set.keys())
             }),
             status_code=400,
             mimetype="application/json",
@@ -202,9 +226,9 @@ def get_games_data(req: func.HttpRequest) -> func.HttpResponse:
         )
 
     try:
-        conn = _get_reader_connection()
+        conn = _get_reader_connection() if source == "snowflake" else _get_postgres_connection()
         cursor = conn.cursor()
-        cursor.execute(ALLOWED_QUERIES[report])
+        cursor.execute(query_set[report])
 
         columns = [col[0].lower() for col in cursor.description]
         rows = [dict(zip(columns, row)) for row in cursor.fetchall()]
@@ -213,14 +237,14 @@ def get_games_data(req: func.HttpRequest) -> func.HttpResponse:
         conn.close()
 
         return func.HttpResponse(
-            json.dumps({"report": report, "row_count": len(rows), "data": rows}, default=str),
+            json.dumps({"report": report, "source": source, "row_count": len(rows), "data": rows}, default=str),
             status_code=200,
             mimetype="application/json",
             headers=cors_headers,
         )
 
     except Exception as e:
-        log.error(f"Error serving /games?report={report}: {e}")
+        log.error(f"Error serving /games?report={report}&source={source}: {e}")
         return func.HttpResponse(
             json.dumps({"error": "Internal server error"}),
             status_code=500,
