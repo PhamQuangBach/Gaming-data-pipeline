@@ -66,8 +66,8 @@ def run_mart_sync(sf_conn=None, pg_conn=None) -> dict:
             pg_conn = psycopg2.connect(
                 host=os.environ["PG_HOST"],
                 port=5432,
-                dbname=os.environ["PG_DB"],
-                user=os.environ["PG_USER"],
+                dbname="gamesdb",
+                user="gaming_app",
                 password=os.environ["PG_PASSWORD"],
                 sslmode="require",
                 connect_timeout=10,
