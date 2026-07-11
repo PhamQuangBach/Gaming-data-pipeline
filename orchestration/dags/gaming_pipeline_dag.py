@@ -29,11 +29,6 @@ def trigger_ingestion(**context):
     context["ti"].xcom_push(key="ingestion_result", value=result)
 
 def run_embed_sync(**context):
-    """
-    Calls embed_sync.run_embed_sync() directly — dbt is installed in this
-    Airflow image (see Dockerfile), and embed_sync.py lives in the mounted
-    transform volume, so we just import and call it.
-    """
     # Add ingestion/ to path so embed_sync is importable
     ingestion_path = "/opt/airflow/transform/../ingestion"
     if ingestion_path not in sys.path:
@@ -43,6 +38,16 @@ def run_embed_sync(**context):
     result = run_embed_sync()
     print(f"Embed sync result: {result}")
     context["ti"].xcom_push(key="embed_sync_result", value=result)
+
+def run_mart_sync(**context):
+    ingestion_path = "/opt/airflow/ingestion"
+    if ingestion_path not in sys.path:
+        sys.path.insert(0, ingestion_path)
+
+    from mart_sync import run_mart_sync
+    result = run_mart_sync()
+    print(f"Mart sync result: {result}")
+    context["ti"].xcom_push(key="mart_sync_result", value=result)
 
 with DAG(
     dag_id="gaming_pipeline",
@@ -73,5 +78,10 @@ with DAG(
         task_id="embed_sync",
         python_callable=run_embed_sync,
     )
+
+    mart_sync = PythonOperator(
+        task_id="mart_sync",
+        python_callable=run_mart_sync,
+    )
  
-    ingest >> dbt_run >> dbt_test >> embed_sync
+    ingest >> dbt_run >> dbt_test >> [embed_sync, mart_sync]

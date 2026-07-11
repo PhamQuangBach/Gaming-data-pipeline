@@ -20,6 +20,7 @@ x-airflow-common:
     - ./dags:/opt/airflow/dags
     - ./logs:/opt/airflow/logs
     - ../transform:/opt/airflow/transform
+    - ../ingestion:/opt/airflow/ingestion
   depends_on:
     postgres:
       condition: service_healthy

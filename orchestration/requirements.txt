@@ -1,0 +1,5 @@
+dbt-snowflake==1.8.0
+psycopg2-binary==2.9.9
+snowflake-connector-python==3.6.0
+voyageai==0.3.2
+python-dotenv==1.0.0
